@@ -6,11 +6,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnContinuar = document.getElementById('btn-continuar');
     const avisoCarga = document.getElementById('aviso-carga'); 
 
+    // Ocultamos elementos que ya no son manuales (La nube manda)
+    const selectModo = document.getElementById('select-modo');
+    const inputBatalla = document.getElementById('input-batalla');
+    if(selectModo) selectModo.style.display = 'none';
+    if(inputBatalla) inputBatalla.style.display = 'none';
+
     // Variables globales para la memoria del paso a paso
     let ticketDataNube = null;
     let ticketString = "";
+    let modoReingreso = false; // Bandera para saber si estamos buscando una partida vieja
 
-    // ====== 1. RECUPERACIÓN AUTOMÁTICA ======
+    // ====== 1. RECUPERACIÓN AUTOMÁTICA (Memoria Caché) ======
     const partidaGuardadaId = localStorage.getItem('motmot_partida_id');
     
     if (partidaGuardadaId) {
@@ -33,39 +40,107 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // ====== 2. REINGRESO MANUAL ======
+    // ====== 2. REINGRESO MANUAL (El "Doble Candado") ======
     if (btnContinuar) {
         btnContinuar.addEventListener('click', async () => {
             const ticketStr = document.getElementById('input-ticket').value.trim().toUpperCase();
             if (!ticketStr) { alert("Ingresa tu código para continuar."); return; }
 
-            avisoCarga.style.display = 'flex';
-            avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">BUSCANDO TU PARTIDA...</p>';
+            // PASO A: Validar que el ticket existe antes de buscar al guerrero
+            if (!modoReingreso) {
+                avisoCarga.style.display = 'flex';
+                avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">VERIFICANDO LLAVE...</p>';
+                
+                try {
+                    const ticketRef = doc(db, 'tickets', ticketStr);
+                    const ticketSnap = await getDoc(ticketRef);
 
-            try {
-                const userCredential = await signInAnonymously(auth);
-                const user = userCredential.user;
+                    if (!ticketSnap.exists() || ticketSnap.data().estado !== 'activo') {
+                        alert("⚠️ Código inválido o caducado.");
+                        avisoCarga.style.display = 'none'; return;
+                    }
 
-                const qCont = query(collection(db, "partidas"), where("ticket_usado", "==", ticketStr), where("uid_jugador", "==", user.uid));
-                const snapCont = await getDocs(qCont);
+                    // A diferencia del registro nuevo, aquí no validamos cupos llenos
+                    // porque el usuario ya está adentro, solo intenta volver.
+                    ticketDataNube = ticketSnap.data();
+                    ticketString = ticketStr;
+                    modoReingreso = true;
 
-                if (!snapCont.empty) {
-                    const datosNube = snapCont.docs[0].data();
-                    localStorage.setItem('motmot_partida_id', snapCont.docs[0].id);
-                    localStorage.setItem('motmot_equipo', datosNube.equipo);
-                    window.location.href = datosNube.estado === 'jugando' ? `pista${datosNube.pista_actual}.html` : "ranking.html";
-                } else {
-                    alert("No encontramos una partida activa para este dispositivo con este código. Verifica el ticket.");
+                    // INTERFAZ: Preparamos la pantalla para buscar al guerrero
+                    document.getElementById('caja-nombres').style.display = 'block';
+                    document.getElementById('input-ticket').disabled = true;
+                    if(document.getElementById('input-equipo')) document.getElementById('input-equipo').style.display = 'none'; // No se pide equipo al volver
+                    
+                    document.getElementById('mensaje-modo').innerText = "🔍 MODO REINGRESO: Identifícate";
+                    document.getElementById('mensaje-modo').style.color = "#888"; // Color gris para diferenciar
+                    
+                    btnContinuar.innerText = "ENTRAR A MI PARTIDA";
+                    btnContinuar.style.background = "#ff6600";
+                    btnContinuar.style.color = "#000";
+                    btnIniciar.style.display = 'none'; // Escondemos el botón de Nueva Misión para no confundir
+
+                    avisoCarga.style.display = 'none';
+                } catch (error) {
+                    alert("Error conectando con la base de datos.");
                     avisoCarga.style.display = 'none';
                 }
+                return; // Pausamos aquí hasta que escriba su nombre y vuelva a dar clic
+            }
+
+            // PASO B: Buscar la combinación exacta (Ticket + Guerrero) en la nube
+            const guerreroStr = document.getElementById('input-guerrero').value.trim();
+            if (!guerreroStr) { alert("Ingresa tu Nombre de Guerrero para buscar tu partida."); return; }
+
+            avisoCarga.style.display = 'flex';
+            avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">BUSCANDO GUERRERO...</p>';
+
+            try {
+                let partidaEncontrada = null;
+                let idPartidaNube = "";
+
+                if (ticketDataNube.modo_asignado === 'cooperativo') {
+                    // Buscar en el array de guerreros del equipo
+                    const qCoop = query(collection(db, "partidas"), where("ticket_usado", "==", ticketString), where("modo", "==", "cooperativo"));
+                    const snapCoop = await getDocs(qCoop);
+
+                    if (!snapCoop.empty) {
+                        const docData = snapCoop.docs[0].data();
+                        if (docData.guerreros && docData.guerreros.includes(guerreroStr)) {
+                            partidaEncontrada = docData;
+                            idPartidaNube = snapCoop.docs[0].id;
+                        }
+                    }
+                } else {
+                    // Solitario y Batalla: Buscar coincidencia directa
+                    const qUnico = query(collection(db, "partidas"), where("ticket_usado", "==", ticketString), where("equipo", "==", guerreroStr));
+                    const snapUnico = await getDocs(qUnico);
+
+                    if (!snapUnico.empty) {
+                        partidaEncontrada = snapUnico.docs[0].data();
+                        idPartidaNube = snapUnico.docs[0].id;
+                    }
+                }
+
+                if (partidaEncontrada) {
+                    // Le devolvemos su sesión al turista
+                    localStorage.setItem('motmot_partida_id', idPartidaNube);
+                    localStorage.setItem('motmot_equipo', partidaEncontrada.equipo);
+                    
+                    window.location.href = partidaEncontrada.estado === 'jugando' ? `pista${partidaEncontrada.pista_actual}.html` : "ranking.html";
+                } else {
+                    alert(`No encontramos a ningún guerrero llamado "${guerreroStr}" en esta llave. Verifica mayúsculas, minúsculas o si pusiste un espacio de más.`);
+                    avisoCarga.style.display = 'none';
+                }
+
             } catch (error) {
-                alert("Error de conexión. Revisa tu internet.");
+                console.error("Error al buscar partida:", error);
+                alert("Error de conexión al buscar tu partida. Revisa tu internet.");
                 avisoCarga.style.display = 'none';
             }
         });
     }
 
-    // ====== 3. NUEVA PARTIDA (El Portero Inteligente en 2 Pasos) ======
+    // ====== 3. NUEVA PARTIDA (Registro Seguro) ======
     if (btnIniciar) {
         btnIniciar.addEventListener('click', async () => {
             const ticketStr = document.getElementById('input-ticket').value.trim().toUpperCase();
@@ -96,7 +171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ticketDataNube = datosTicket;
                     ticketString = ticketStr;
 
-                    // INTERFAZ: Mostramos qué modo detectó la nube automáticamente
+                    // INTERFAZ
                     document.getElementById('caja-nombres').style.display = 'block';
                     document.getElementById('input-ticket').disabled = true; 
                     
@@ -105,19 +180,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if(datosTicket.modo_asignado === 'batalla') mensaje = `⚔️ MODO BATALLA DETECTADO (${datosTicket.limite_usos - usosActuales} cupos libres)`;
                     if(datosTicket.modo_asignado === 'cooperativo') {
                         mensaje = "🤝 MODO COOPERATIVO DETECTADO";
-                        // Si es el primero, debe crear el equipo
                         if(usosActuales === 0) document.getElementById('input-equipo').style.display = 'block';
                     }
                     
                     document.getElementById('mensaje-modo').innerText = mensaje;
                     btnIniciar.innerText = "COMENZAR MISIÓN";
+                    btnContinuar.style.display = 'none'; // Escondemos "Continuar" para evitar confusiones
                     avisoCarga.style.display = 'none';
 
                 } catch (error) {
                     alert("Error conectando con la base de datos.");
                     avisoCarga.style.display = 'none';
                 }
-                return; // Pausa el botón hasta que escriba su nombre y vuelva a dar clic
+                return;
             }
 
             // --- PASO B: VALIDAR IDENTIDAD Y CREAR PARTIDA ---
@@ -139,7 +214,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let idDocumentoFinal = "";
                 let nombreEquipoFinal = "";
 
-                // LÓGICA COOPERATIVA
                 if (modoAsignado === 'cooperativo') {
                     const qCoop = query(collection(db, "partidas"), where("ticket_usado", "==", ticketString), where("modo", "==", "cooperativo"));
                     const snapCoop = await getDocs(qCoop);
@@ -177,7 +251,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         });
                     }
                 } 
-                // LÓGICA SOLITARIO Y BATALLA
                 else {
                     const qUnico = query(collection(db, "partidas"), where("ticket_usado", "==", ticketString), where("equipo", "==", guerreroStr));
                     const snapUnico = await getDocs(qUnico);
@@ -205,7 +278,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     });
                 }
 
-                // ACTUALIZAMOS CUPOS DEL TICKET
                 await updateDoc(doc(db, 'tickets', ticketString), {
                     usos_actuales: ticketDataNube.usos_actuales + 1
                 });
