@@ -5,8 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnIniciar = document.getElementById('btn-iniciar');
     const avisoCarga = document.getElementById('aviso-carga'); 
 
-    // ====== NUEVO: SISTEMA DE RECUPERACIÓN DE PARTIDA ======
-    // 1. Revisamos si el celular tiene un ticket VIP guardado
+    // ====== 1. RECUPERACIÓN AUTOMÁTICA (Si el turista NO ha borrado el caché) ======
     const partidaGuardadaId = localStorage.getItem('motmot_partida_id');
     
     if (partidaGuardadaId) {
@@ -14,24 +13,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">RECUPERANDO MISIÓN...</p>';
         
         try {
-            // 2. Vamos a Firebase a ver en qué pista se quedó
             const partidaRef = doc(db, 'partidas', partidaGuardadaId);
             const partidaSnap = await getDoc(partidaRef);
             
             if (partidaSnap.exists()) {
                 const datos = partidaSnap.data();
-                
                 if (datos.estado === 'jugando') {
-                    // Si estaba jugando, lo teletransportamos a su pista exacta
                     window.location.href = `pista${datos.pista_actual}.html`;
                     return; 
                 } else if (datos.estado === 'terminado') {
-                    // Si ya había terminado, lo mandamos directo al Salón de la Fama
                     window.location.href = "ranking.html";
                     return;
                 }
             } else {
-                // Si la partida fue borrada de la base de datos, limpiamos la memoria y apagamos la carga
                 localStorage.removeItem('motmot_partida_id');
                 avisoCarga.style.display = 'none';
             }
@@ -41,9 +35,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             avisoCarga.style.display = 'none';
         }
     }
-    // ========================================================
 
-    // LOGICA ORIGINAL DE INICIO NUEVO (Si no tenía partida guardada)
+    // ====== 2. INICIO MANUAL / RECUPERACIÓN DESDE LA NUBE (Si borró el caché) ======
     if (btnIniciar) {
         btnIniciar.addEventListener('click', async () => {
             
@@ -57,9 +50,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             avisoCarga.style.display = 'flex';
-            avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">VALIDANDO CREDENCIALES...</p>';
+            avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">CONECTANDO CON LA NUBE...</p>';
 
             try {
+                // A. Validar que el ticket general exista
                 const ticketRef = doc(db, 'tickets', ticketStr);
                 const ticketSnap = await getDoc(ticketRef);
 
@@ -69,6 +63,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return;
                 }
 
+                // B. ¡LA MAGIA EN LA NUBE! Buscamos si ya existe una partida atada a este ticket
+                const partidaRef = doc(db, 'partidas', ticketStr); // Usamos el ticket como ID
+                const partidaSnap = await getDoc(partidaRef);
+
+                if (partidaSnap.exists()) {
+                    // ¡El jugador ya había empezado! Lo recuperamos desde Firebase
+                    const datosNube = partidaSnap.data();
+                    
+                    // Restauramos la memoria en su celular para que no tenga que volver a loguearse
+                    localStorage.setItem('motmot_partida_id', ticketStr);
+                    localStorage.setItem('motmot_equipo', datosNube.equipo);
+
+                    if (datosNube.estado === 'jugando') {
+                        alert(`¡Bienvenido de vuelta, equipo ${datosNube.equipo}! Retomando desde la pista ${datosNube.pista_actual}...`);
+                        window.location.href = `pista${datosNube.pista_actual}.html`;
+                    } else {
+                        window.location.href = "ranking.html";
+                    }
+                    return; // Cortamos el código aquí. Ya no crea una partida nueva.
+                }
+
+                // C. Si no existía la partida, es un JUGADOR NUEVO. Creamos todo desde cero.
                 const userCredential = await signInAnonymously(auth);
                 const user = userCredential.user;
 
@@ -77,9 +93,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     idSala = prompt("Has elegido Modo Batalla ⚔️\nIngresa el código de sala compartido con tus contrincantes (Ej: FLIA-PEREZ):") || "SALA-GENERAL";
                 }
 
-                const nuevaPartidaRef = doc(collection(db, "partidas")); 
-                
-                await setDoc(nuevaPartidaRef, {
+                // Guardamos la nueva partida obligando a Firebase a que el ID sea el código del ticket
+                await setDoc(partidaRef, {
                     uid_jugador: user.uid,
                     ticket_usado: ticketStr,
                     equipo: equipoStr,
@@ -91,8 +106,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     t_inicio: serverTimestamp() 
                 });
 
-                // Guardar la "Memoria" en el celular del turista
-                localStorage.setItem('motmot_partida_id', nuevaPartidaRef.id);
+                // Memoria local
+                localStorage.setItem('motmot_partida_id', ticketStr);
                 localStorage.setItem('motmot_equipo', equipoStr);
                 
                 window.location.href = "pista1.html"; 
