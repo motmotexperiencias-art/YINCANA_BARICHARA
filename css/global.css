@@ -60,3 +60,65 @@ body, html {
     border-top: 4px solid #ff6600; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; 
 }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+
+/* =========================================
+   DISEÑO DEL TABLERO DE PISTAS FLOTANTE
+========================================= */
+.btn-flotante {
+    position: fixed;
+    bottom: 30px;
+    right: 20px;
+    background: #ff6600;
+    color: white;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    font-size: 30px;
+    text-align: center;
+    line-height: 60px;
+    box-shadow: 0px 4px 15px rgba(255, 102, 0, 0.5);
+    z-index: 1000;
+    cursor: pointer;
+    border: 2px solid #fff;
+}
+
+.modal-tablero {
+    display: none; /* Oculto por defecto */
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.contenido-tablero {
+    background: #111;
+    border: 2px solid #ff6600;
+    border-radius: 15px;
+    padding: 25px;
+    width: 85%;
+    max-height: 80vh;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.pista-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #333;
+    color: #888;
+    font-size: 14px;
+}
+
+.pista-item.completada {
+    color: #00cc66;
+    font-weight: bold;
+}
+
+.pista-item.actual {
+    color: #ff6600;
+    font-weight: bold;
+    font-size: 16px;
+}
