@@ -1,0 +1,99 @@
+Cronograma de Desarrollo Detallado: Yincana Barichara (Arquitectura Firebase)
+
+#### SPRINT 1: El Cerebro (Back-End Firebase)
+
+**Duración:** 1 Semana
+**Objetivo:** Crear la base de datos y las reglas que el celular no puede hackear.
+
+* **Acción 1:** Ir a la consola de Firebase, crear un proyecto llamado "Motmot Yincana" y activar **Firestore Database** y **Anonymous Authentication**.
+
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyDNJbh9N3qWQjaSNBuudSYKVwR3EM492OQ",
+    authDomain: "yincana-barichara.firebaseapp.com",
+    projectId: "yincana-barichara",
+    storageBucket: "yincana-barichara.firebasestorage.app",
+    messagingSenderId: "1013596720873",
+    appId: "1:1013596720873:web:c266b680f856fdf98e6a78",
+    measurementId: "G-0KR7492ZF0"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+
+
+
+
+
+* **Acción 2:** En Firestore, crear manualmente las colecciones: `tickets` (donde estarán los códigos como `MOT-8X4P`), `partidas` (donde se guardará el progreso de cada jugador) y `logs` (historial de escaneos).
+* **Acción 3:** Crear el archivo `firebase-config.js`. Este archivo tendrá las claves públicas de Firebase para que el juego se conecte a la base de datos.
+* **Acción 4:** Crear el archivo `auth.js`. Este archivo tendrá la lógica para:
+1. Leer el código que mete el usuario.
+2. Ir a Firebase y preguntar: "¿Existe y está disponible?".
+3. Si sí, crear un documento en la colección `partidas` con la hora del servidor (Ej: `t_inicio: serverTimestamp()`).
+
+
+* **Entregable:** La base de datos lista para recibir información y los archivos base para conectarse.
+
+#### SPRINT 2: Estandarización del Diseño (Front-End Core)
+
+**Duración:** 1 Semana
+**Objetivo:** Crear el diseño visual y las funciones que se repetirán en todo el juego, para no copiar y pegar código 10 veces.
+
+* **Acción 1:** Crear el archivo **`css/global.css`**. Aquí se pondrá el fondo negro, los botones naranjas, el tipo de letra, y el diseño de la barra de progreso. Todo el CSS de las pistas actuales se moverá aquí.
+* **Acción 2:** Crear el archivo **`js/core.js`**. Aquí irán las funciones que se usan en todas las pistas: `forzarFullScreen()`, `verificarPantalla()`, `mostrarAlerta()`, `ejecutarJSONP` (que ahora será una llamada a Firebase).
+* **Acción 3:** Crear el archivo **`js/gps.js`**. Aquí irá la función `calcularDistancia()` (fórmula Haversine) y la lógica para conectarse al mapa de Leaflet.
+* **Acción 4:** Crear el archivo **`js/scanner.js`**. Aquí irá la lógica de `html5-qrcode` para encender la cámara y validar el texto escaneado.
+* **Acción 5:** Reconstruir **`index.html`** (El Tablero). Usará los archivos creados arriba. Al ingresar, en lugar de ir a Google Sheets, llamará a `auth.js` para validarse en Firebase.
+* **Entregable:** Un proyecto ordenado en carpetas (`/css`, `/js`), un Tablero (`index.html`) funcional conectado a Firebase, y las herramientas listas para ensamblar las pistas.
+
+#### SPRINT 3: Ensamblaje de Pistas 1 a 5
+
+**Duración:** 1.5 Semanas
+**Objetivo:** Armar la primera mitad del juego, usando las piezas creadas en el Sprint 2.
+
+* **Acción 1 (Plantilla):** Crear un archivo `molde-pista.html`. Este archivo tendrá la estructura vacía (la barra de progreso, los contenedores 50/50) y los enlaces a `global.css`, `core.js`, `gps.js`, etc.
+* **Acción 2 (Pista 1):** Duplicar el molde y llamarlo **`pista1.html`**. Insertar el video de introducción, las coordenadas GPS (Fuente Antigua), los textos específicos y el código QR esperado (`BARICHARA_PISTA_01`).
+* **Acción 3 (Pista 2):** Duplicar el molde y llamarlo **`pista2.html`**. Modificar la barra de progreso (Punto 2 activo), agregar los audios (Tibetano/Kids), el video de la Escuela Taller y las coordenadas correspondientes.
+* **Acción 4 (Pistas 3, 4 y 5):** Repetir el proceso creando **`pista3.html`** (Colombiana de Tabaco), **`pista4.html`** (Cementerio), y **`pista5.html`**.
+* **Acción 5 (Conexión):** En cada pista, al escanear el QR correcto, el código ya no irá a Google Sheets, sino que usará Firebase para actualizar el documento de la partida: `partida.update({ pista_actual: X+1 })`, y luego redirigirá a `index.html`.
+* **Entregable:** Archivos HTML individuales del 1 al 5, funcionando y avanzando el progreso en Firebase.
+
+#### SPRINT 4: Ensamblaje de Pistas 6 a 10 y Ranking
+
+**Duración:** 1.5 Semanas
+**Objetivo:** Finalizar el recorrido y construir el Salón de la Fama.
+
+* **Acción 1 (Pistas 6-9):** Crear los archivos **`pista6.html`** a **`pista9.html`** siguiendo el mismo proceso del Sprint 3.
+* **Acción 2 (El Clímax):** Crear el archivo **`tesoro.html`** (o `pista10.html`). Aquí, al lograr el objetivo final, el código le dirá a Firebase: "¡Terminó!". Firebase guardará el `t_fin` (hora exacta del servidor).
+* **Acción 3 (El Salón de la Fama):** Crear el archivo **`ranking.html`**. Este archivo se conectará a la colección `partidas` de Firebase, tomará todas las partidas terminadas, calculará la diferencia de tiempo (`t_fin` - `t_inicio`), las ordenará de menor a mayor tiempo y las mostrará en una lista atractiva.
+* **Entregable:** El juego completo, de principio a fin, con tiempos calculados y un ranking funcional.
+
+#### SPRINT 5: Lobbies de Batalla y Modo Offline
+
+**Duración:** 1 Semana
+**Objetivo:** Agregar la capa social (competir contra amigos) y asegurar que el juego no se rompa sin internet.
+
+* **Acción 1 (Modo Batalla):** En `index.html`, si se elige "Modo Batalla", el jugador podrá crear una sala (Ej: "FAMILIA-PEREZ") o unirse a una. Firebase guardará este ID. En `ranking.html`, habrá un filtro para ver "Ranking Global" o "Ranking de mi Sala".
+* **Acción 2 (Offline-First):** Crear el archivo **`sw.js`** (Service Worker). Escribir la lógica para que, al cargar `index.html`, el navegador guarde en su caché interno todos los videos (`.mp4`) e imágenes de las 10 pistas. Habilitar la *Offline Persistence* de Firebase en `firebase-config.js`.
+* **Entregable:** Un juego que resiste caídas de red y permite competiciones privadas entre amigos.
+
+#### SPRINT 6: Pruebas, Dominio y Lanzamiento
+
+**Duración:** 1 Semana
+**Objetivo:** Poner el producto en vivo bajo un entorno profesional.
+
+* **Acción 1 (Testeo de Campo):** Caminar físicamente por Barichara con la aplicación. Probar cada Pista (1 a 10). Ajustar en los archivos las distancias de validación GPS si algún punto tiene mala cobertura satelital.
+* **Acción 2 (Migración a Netlify):** Crear cuenta en Netlify, vincular el repositorio de GitHub. Netlify publicará la web automáticamente.
+* **Acción 3 (Dominio Personalizado):** Comprar y configurar un dominio (Ej. `misionbarichara.com`) en Netlify, asegurando que el certificado SSL (`https://`) esté activo (requisito obligatorio para usar la cámara).
+* **Entregable Final:** Aplicación desplegada en su dominio final, lista para recibir jugadores y generar ingresos.
