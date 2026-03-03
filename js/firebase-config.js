@@ -1,6 +1,6 @@
 // Importar las funciones base de Firebase directamente desde Google (sin instalar nada extra)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, serverTimestamp, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 // Tus "Llaves" mágicas de Firebase
@@ -19,5 +19,5 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Exportar estas herramientas para que los demás archivos (auth.js, motor.js) puedan usarlas
-export { db, auth, signInAnonymously, collection, doc, getDoc, setDoc, updateDoc, serverTimestamp };
+// Exportar estas herramientas para que los demás archivos (auth.js, motor.js, ranking.html) puedan usarlas
+export { db, auth, signInAnonymously, collection, doc, getDoc, setDoc, updateDoc, serverTimestamp, getDocs, query, where };
