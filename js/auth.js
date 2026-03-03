@@ -2,11 +2,24 @@
 import { db, auth, signInAnonymously, collection, doc, getDoc, setDoc, query, where, getDocs, serverTimestamp } from './firebase-config.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const btnIniciar = document.getElementById('btn-iniciar');
-    const btnContinuar = document.getElementById('btn-continuar'); // NUEVO BOTÓN
+    // Referencias a las cajas de pasos
+    const paso1Ticket = document.getElementById('paso-1-ticket');
+    const paso2Lobby = document.getElementById('paso-2-lobby');
+    const paso3Crear = document.getElementById('paso-3-crear');
+    
+    // Referencias a los botones e inputs
+    const btnBuscarTicket = document.getElementById('btn-buscar-ticket');
+    const btnMostrarCrear = document.getElementById('btn-mostrar-crear');
+    const btnVolverTicket = document.getElementById('btn-volver-ticket');
+    const btnVolverLobby = document.getElementById('btn-volver-lobby');
+    const btnIniciarNuevo = document.getElementById('btn-iniciar-nuevo');
+    const listaEquiposLobby = document.getElementById('lista-equipos-lobby');
     const avisoCarga = document.getElementById('aviso-carga'); 
 
-    // ====== 1. RECUPERACIÓN AUTOMÁTICA (Si el turista NO ha borrado el caché) ======
+    // Variable global para guardar el ticket válido
+    let ticketValidado = "";
+
+    // ====== 1. RECUPERACIÓN AUTOMÁTICA (Mantenido de tu versión original) ======
     const partidaGuardadaId = localStorage.getItem('motmot_partida_id');
     
     if (partidaGuardadaId) {
@@ -37,23 +50,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // ====== 2. FUNCIÓN MAESTRA DE INGRESO ======
-    async function procesarIngreso(esContinuacion) {
-        const ticketStr = document.getElementById('input-ticket').value.trim().toUpperCase();
-        const equipoStr = document.getElementById('input-equipo').value.trim();
-        const modoStr = document.getElementById('select-modo').value;
+    // ====== 2. LÓGICA DE NAVEGACIÓN ENTRE PASOS ======
 
-        // Siempre exigimos el código primero
-        if (!ticketStr) {
-            alert("Por favor, ingresa tu código de acceso.");
-            return;
-        }
+    // A. Buscar el Ticket y Cargar el Lobby
+    btnBuscarTicket.addEventListener('click', async () => {
+        const ticketStr = document.getElementById('input-ticket').value.trim().toUpperCase();
+        if (!ticketStr) { alert("Ingresa tu código de acceso."); return; }
 
         avisoCarga.style.display = 'flex';
-        avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">CONECTANDO CON LA NUBE...</p>';
+        avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">BUSCANDO MISIÓN...</p>';
 
         try {
-            // A. Validar que el ticket general exista y esté activo
+            // 1. Validar ticket
             const ticketRef = doc(db, 'tickets', ticketStr);
             const ticketSnap = await getDoc(ticketRef);
 
@@ -63,76 +71,103 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Iniciamos sesión anónima obligatoriamente para saber QUIÉN es este celular (UID)
+            ticketValidado = ticketStr;
+
+            // 2. Buscar qué equipos están jugando ahora mismo con ese ticket
+            const q = query(collection(db, "partidas"), where("ticket_usado", "==", ticketStr));
+            const querySnapshot = await getDocs(q);
+
+            listaEquiposLobby.innerHTML = ""; // Limpiamos la lista
+
+            if (querySnapshot.empty) {
+                listaEquiposLobby.innerHTML = "<p style='font-size:12px; color:#888; text-align:center;'>No hay equipos jugando. ¡Sé el primero!</p>";
+            } else {
+                // Generamos un botón por cada equipo encontrado
+                querySnapshot.forEach((docSnap) => {
+                    const datos = docSnap.data();
+                    const btnEquipo = document.createElement('button');
+                    btnEquipo.className = 'btn-opcion-azul'; // Reutilizamos tu clase de global.css
+                    btnEquipo.innerHTML = `🏁 ${datos.equipo} <span style="font-size:10px; color:#aaa; float:right;">(${datos.modo})</span>`;
+                    
+                    // Al tocar el botón de un equipo, intentamos unirnos
+                    btnEquipo.onclick = () => unirseAEquipoExistente(docSnap.id, datos);
+                    listaEquiposLobby.appendChild(btnEquipo);
+                });
+            }
+
+            // Cambiamos de pantalla visualmente
+            paso1Ticket.style.display = 'none';
+            paso2Lobby.style.display = 'block';
+            avisoCarga.style.display = 'none';
+
+        } catch (error) {
+            console.error(error);
+            alert("Error de conexión. Revisa tu internet.");
+            avisoCarga.style.display = 'none';
+        }
+    });
+
+    // B. Unirse a un Equipo Existente desde el Lobby
+    async function unirseAEquipoExistente(idPartida, datosPartida) {
+        avisoCarga.style.display = 'flex';
+        avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">UNIÉNDOSE AL EQUIPO...</p>';
+
+        try {
             const userCredential = await signInAnonymously(auth);
             const user = userCredential.user;
 
-            // B. Buscamos si ya existe una partida atada a este ticket Y a este nombre de equipo
-            // (Así evitamos la Guerra de Clones: Buscamos una partida específica, no solo el ticket general)
-            const q = query(
-                collection(db, "partidas"), 
-                where("ticket_usado", "==", ticketStr),
-                where("equipo", "==", equipoStr) 
-            );
-            const querySnapshot = await getDocs(q);
-
-            let partidaExistente = null;
-            let idPartidaExistente = null;
-
-            if (!querySnapshot.empty) {
-                 // Si encontró una partida con ese código y ese nombre de equipo, tomamos la primera
-                partidaExistente = querySnapshot.docs[0].data();
-                idPartidaExistente = querySnapshot.docs[0].id;
-            }
-
-            // Si encontró la partida, es un JUGADOR QUE REGRESA o UN COMPAÑERO DE EQUIPO
-            if (partidaExistente) {
-                
-                // PROTECCIÓN MODO GUERRERO: Si la partida es modo guerrero, verificamos que el UID sea el creador original
-                if (partidaExistente.modo === 'guerrero' && partidaExistente.uid_jugador !== user.uid) {
-                    alert("⚔️ Esta partida está en Modo Guerrero y ya está siendo jugada por otro aventurero. No puedes unirte a ella.");
-                    avisoCarga.style.display = 'none';
-                    return;
-                }
-
-                // ¡EL JUGADOR REGRESA (o es un compañero de equipo)!
-                localStorage.setItem('motmot_partida_id', idPartidaExistente);
-                localStorage.setItem('motmot_equipo', partidaExistente.equipo);
-
-                if (partidaExistente.estado === 'jugando') {
-                    alert(`¡Bienvenido de vuelta, equipo ${partidaExistente.equipo}! Retomando desde la pista ${partidaExistente.pista_actual}...`);
-                    window.location.href = `pista${partidaExistente.pista_actual}.html`;
-                } else {
-                    window.location.href = "ranking.html";
-                }
-                return; 
-            }
-
-            // C. SI LLEGA AQUÍ, LA PARTIDA NO EXISTE EN LA NUBE.
-            if (esContinuacion) {
-                alert("No encontramos ninguna partida guardada con este código y este nombre de equipo. Llena correctamente el nombre de tu equipo y toca 'INICIAR NUEVA PARTIDA'.");
+            // PROTECCIÓN MODO GUERRERO MANTENIDA
+            if (datosPartida.modo === 'guerrero' && datosPartida.uid_jugador !== user.uid) {
+                alert("⚔️ Esta partida está en Modo Guerrero (Privada). ¡Crea un nuevo equipo para jugar tu propia batalla!");
                 avisoCarga.style.display = 'none';
                 return;
             }
 
-            if (!equipoStr) {
-                alert("¡Código válido! Al ser tu primera vez, por favor ingresa un Nombre de Equipo para comenzar.");
-                avisoCarga.style.display = 'none';
-                return;
-            }
+            localStorage.setItem('motmot_partida_id', idPartida);
+            localStorage.setItem('motmot_equipo', datosPartida.equipo);
 
-            // D. CREAMOS UNA PARTIDA TOTALMENTE NUEVA
+            if (datosPartida.estado === 'jugando') {
+                window.location.href = `pista${datosPartida.pista_actual}.html`;
+            } else {
+                window.location.href = "ranking.html";
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error de conexión al unirse.");
+            avisoCarga.style.display = 'none';
+        }
+    }
+
+    // C. Mostrar Formulario de Crear Equipo
+    btnMostrarCrear.addEventListener('click', () => {
+        paso2Lobby.style.display = 'none';
+        paso3Crear.style.display = 'block';
+    });
+
+    // D. Crear una Partida Totalmente Nueva
+    btnIniciarNuevo.addEventListener('click', async () => {
+        const equipoStr = document.getElementById('input-equipo').value.trim();
+        const modoStr = document.getElementById('select-modo').value;
+
+        if (!equipoStr) { alert("Por favor ingresa un Nombre de Equipo."); return; }
+
+        avisoCarga.style.display = 'flex';
+        avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">CREANDO MISIÓN...</p>';
+
+        try {
+            const userCredential = await signInAnonymously(auth);
+            const user = userCredential.user;
+
             let idSala = "";
             if (modoStr === 'batalla') {
-                idSala = prompt("Has elegido Modo Batalla ⚔️\nIngresa el código de sala compartido con tus contrincantes (Ej: FLIA-PEREZ):") || "SALA-GENERAL";
+                idSala = prompt("Has elegido Modo Batalla ⚔️\nIngresa el código de sala compartido con tus contrincantes:") || "SALA-GENERAL";
             }
 
-            // Creamos una nueva referencia de documento con ID AUTO-GENERADO
             const nuevaPartidaRef = doc(collection(db, "partidas"));
 
             await setDoc(nuevaPartidaRef, {
                 uid_jugador: user.uid,
-                ticket_usado: ticketStr,
+                ticket_usado: ticketValidado,
                 equipo: equipoStr,
                 modo: modoStr,
                 id_sala: idSala.toUpperCase(),
@@ -142,24 +177,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 t_inicio: serverTimestamp() 
             });
 
-            // Guardamos el ID AUTO-GENERADO en la memoria del celular
             localStorage.setItem('motmot_partida_id', nuevaPartidaRef.id);
             localStorage.setItem('motmot_equipo', equipoStr);
             
             window.location.href = "pista1.html"; 
 
         } catch (error) {
-            console.error("Error crítico en el motor:", error);
-            alert("Error de conexión. Revisa tu internet e intenta de nuevo.");
+            console.error(error);
+            alert("Error creando la partida.");
             avisoCarga.style.display = 'none';
         }
-    }
+    });
 
-    // Conectamos los botones a la función maestra
-    if (btnIniciar) {
-        btnIniciar.addEventListener('click', () => procesarIngreso(false));
-    }
-    if (btnContinuar) {
-        btnContinuar.addEventListener('click', () => procesarIngreso(true));
-    }
+    // E. Botones de Volver (Navegación)
+    btnVolverTicket.addEventListener('click', () => {
+        paso2Lobby.style.display = 'none';
+        paso1Ticket.style.display = 'block';
+    });
+
+    btnVolverLobby.addEventListener('click', () => {
+        paso3Crear.style.display = 'none';
+        paso2Lobby.style.display = 'block';
+    });
 });
