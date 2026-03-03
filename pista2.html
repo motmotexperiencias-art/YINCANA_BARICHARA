@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Yincana | Pista 1</title>
+    <title>Yincana | Pista 2</title>
     
     <link rel="stylesheet" href="./css/global.css">
     
@@ -30,8 +30,8 @@
 
         <div id="step-intro" class="caja-contenedor">
             <div style="font-size: 50px; margin-bottom:20px;">💧</div>
-            <div class="etiqueta-evidencia">PISTA 1: EL ORIGEN</div>
-            <p class="texto-mision">"El agua es la sangre de la tierra. Busca la estructura de piedra antigua donde los fundadores saciaban su sed."</p>
+            <div class="etiqueta-evidencia">PISTA 2: LOS SABERES</div>
+            <p class="texto-mision">"Busca el lugar donde los saberes ancestrales están vivos, una escuela taller."</p>
             <button class="btn-motmot" id="btn-comenzar">INICIAR RASTREO GPS</button>
         </div>
 
@@ -63,7 +63,7 @@
         const DESTINO_LAT = 6.633595; 
         const DESTINO_LON = -73.225215;
         // Este es el texto que DEBE decir el QR pegado en la pared de Barichara
-        const QR_CORRECTO = "BARICHARA_PISTA_01"; 
+        const QR_CORRECTO = "BARICHARA_PISTA_02"; 
         
         let watchID;
 
@@ -102,10 +102,10 @@
                 alert("¡CÓDIGO VERIFICADO! Avanzando a la Pista 2...");
                 
                 // Guardamos en la base de datos que ya pasó a la pista 2
-                await avanzarPistaEnFirebase(2);
+                await avanzarPistaEnFirebase(3);
                 
                 // Lo mandamos a la pista 2 (que crearemos en el siguiente paso)
-                window.location.href = "pista1.html"; 
+                window.location.href = "pista3.html"; 
             });
         });
     </script>
