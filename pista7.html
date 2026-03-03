@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Yincana | Pista 7</title>
+    
+    <link rel="stylesheet" href="./css/global.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <style>
+        #mapa-gps-activo { width: 100%; height: 250px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ff6600; }
+        .leaflet-tile { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+        #lector-qr { width: 100%; min-height: 250px; margin-bottom: 15px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="app-juego">
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="dot passed"></div><div class="dot passed"></div><div class="dot passed"></div><div class="dot passed"></div><div class="dot passed"></div><div class="dot passed"></div><div class="dot active"></div><div class="dot future"></div><div class="dot future"></div><div class="dot future"></div>
+            </div>
+        </div>
+
+        <div id="step-intro" class="caja-contenedor">
+            <div style="font-size: 50px; margin-bottom:20px;">🌳</div>
+            <div class="etiqueta-evidencia">PISTA 7: EL PARQUE</div>
+            <p class="texto-mision">"El corazón del pueblo. Busca la sombra de los árboles centenarios donde los abuelos cuentan historias."</p>
+            <button class="btn-motmot" id="btn-comenzar">INICIAR RASTREO GPS</button>
+        </div>
+
+        <div id="step-gps" class="caja-contenedor" style="display:none;">
+            <div class="etiqueta-evidencia">OBJETIVO: EL PARQUE</div>
+            <div id="mapa-gps-activo"></div>
+            <div style="font-size:12px; color:#888;">DISTANCIA AL OBJETIVO</div>
+            <div id="distancia-gps" style="font-size:40px; color:#ff6600; font-weight:bold;">---</div>
+            <p style="font-size:10px; color:#ff6600; margin-top:5px;" id="lbl-status">BUSCANDO SEÑAL...</p>
+            <p style="margin-top:20px; font-size:10px; text-decoration:underline; cursor:pointer; color:#444;" id="btn-trampa">Omitir GPS (Debug)</p>
+        </div>
+
+        <div id="step-exito" class="caja-contenedor" style="display:none;">
+            <div style="font-size: 50px; margin-bottom:20px;">🎯</div>
+            <div class="etiqueta-evidencia" style="background: #00cc66; color: #fff;">¡HAS LLEGADO!</div>
+            <p class="texto-mision">Busca el código QR oculto cerca de la fuente principal y escanéalo.</p>
+            
+            <div id="lector-qr"></div>
+            <button class="btn-motmot" id="btn-escanear">ABRIR CÁMARA</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { iniciarMapa, calcularDistanciaMetros } from './js/gps.js';
+        import { iniciarEscaner } from './js/scanner.js';
+        import { avanzarPistaEnFirebase } from './js/motor.js';
+
+        const DESTINO_LAT = 6.633595; 
+        const DESTINO_LON = -73.225215;
+        const QR_CORRECTO = "BARICHARA_PISTA_07"; 
+        
+        let watchID;
+
+        document.getElementById('btn-comenzar').addEventListener('click', () => {
+            document.getElementById('step-intro').style.display = 'none';
+            document.getElementById('step-gps').style.display = 'block';
+            iniciarMapa('mapa-gps-activo', DESTINO_LAT, DESTINO_LON);
+
+            if (navigator.geolocation) {
+                document.getElementById('lbl-status').innerText = "SINTONIZANDO SATÉLITES...";
+                watchID = navigator.geolocation.watchPosition((pos) => {
+                    const d = calcularDistanciaMetros(pos.coords.latitude, pos.coords.longitude, DESTINO_LAT, DESTINO_LON);
+                    document.getElementById('distancia-gps').innerText = Math.round(d) + "m";
+                    document.getElementById('lbl-status').innerText = "RASTREANDO...";
+                    if (d < 25) llegamosAlDestino();
+                }, (err) => { document.getElementById('lbl-status').innerText = "ERROR DE SEÑAL GPS"; }, { enableHighAccuracy: true });
+            }
+        });
+
+        function llegamosAlDestino() {
+            if(watchID) navigator.geolocation.clearWatch(watchID);
+            document.getElementById('step-gps').style.display = 'none';
+            document.getElementById('step-exito').style.display = 'block';
+        }
+
+        document.getElementById('btn-trampa').addEventListener('click', llegamosAlDestino);
+        
+        document.getElementById('btn-escanear').addEventListener('click', () => {
+            document.getElementById('btn-escanear').style.display = 'none'; 
+            
+            iniciarEscaner('lector-qr', QR_CORRECTO, async () => {
+                alert("¡CÓDIGO VERIFICADO! Avanzando a la Pista 8...");
+                await avanzarPistaEnFirebase(8);
+                window.location.href = "pista8.html"; 
+            });
+        });
+    </script>
+</body>
+</html>
