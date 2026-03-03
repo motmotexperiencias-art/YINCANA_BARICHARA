@@ -1,5 +1,5 @@
 // Importamos las herramientas desde tu archivo de configuración
-import { db, auth, signInAnonymously, collection, doc, getDoc, setDoc, serverTimestamp } from './firebase-config.js';
+import { db, auth, signInAnonymously, collection, doc, getDoc, setDoc, query, where, getDocs, serverTimestamp } from './firebase-config.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const btnIniciar = document.getElementById('btn-iniciar');
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         avisoCarga.innerHTML = '<div class="spinner"></div><p style="color:#ff6600; font-weight:bold;">CONECTANDO CON LA NUBE...</p>';
 
         try {
-            // A. Validar que el ticket general exista
+            // A. Validar que el ticket general exista y esté activo
             const ticketRef = doc(db, 'tickets', ticketStr);
             const ticketSnap = await getDoc(ticketRef);
 
@@ -63,20 +63,45 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // B. Buscamos si ya existe una partida atada a este ticket
-            const partidaRef = doc(db, 'partidas', ticketStr); 
-            const partidaSnap = await getDoc(partidaRef);
+            // Iniciamos sesión anónima obligatoriamente para saber QUIÉN es este celular (UID)
+            const userCredential = await signInAnonymously(auth);
+            const user = userCredential.user;
 
-            if (partidaSnap.exists()) {
-                // ¡EL JUGADOR REGRESA! 
-                const datosNube = partidaSnap.data();
+            // B. Buscamos si ya existe una partida atada a este ticket Y a este nombre de equipo
+            // (Así evitamos la Guerra de Clones: Buscamos una partida específica, no solo el ticket general)
+            const q = query(
+                collection(db, "partidas"), 
+                where("ticket_usado", "==", ticketStr),
+                where("equipo", "==", equipoStr) 
+            );
+            const querySnapshot = await getDocs(q);
+
+            let partidaExistente = null;
+            let idPartidaExistente = null;
+
+            if (!querySnapshot.empty) {
+                 // Si encontró una partida con ese código y ese nombre de equipo, tomamos la primera
+                partidaExistente = querySnapshot.docs[0].data();
+                idPartidaExistente = querySnapshot.docs[0].id;
+            }
+
+            // Si encontró la partida, es un JUGADOR QUE REGRESA o UN COMPAÑERO DE EQUIPO
+            if (partidaExistente) {
                 
-                localStorage.setItem('motmot_partida_id', ticketStr);
-                localStorage.setItem('motmot_equipo', datosNube.equipo);
+                // PROTECCIÓN MODO GUERRERO: Si la partida es modo guerrero, verificamos que el UID sea el creador original
+                if (partidaExistente.modo === 'guerrero' && partidaExistente.uid_jugador !== user.uid) {
+                    alert("⚔️ Esta partida está en Modo Guerrero y ya está siendo jugada por otro aventurero. No puedes unirte a ella.");
+                    avisoCarga.style.display = 'none';
+                    return;
+                }
 
-                if (datosNube.estado === 'jugando') {
-                    alert(`¡Bienvenido de vuelta, equipo ${datosNube.equipo}! Retomando desde la pista ${datosNube.pista_actual}...`);
-                    window.location.href = `pista${datosNube.pista_actual}.html`;
+                // ¡EL JUGADOR REGRESA (o es un compañero de equipo)!
+                localStorage.setItem('motmot_partida_id', idPartidaExistente);
+                localStorage.setItem('motmot_equipo', partidaExistente.equipo);
+
+                if (partidaExistente.estado === 'jugando') {
+                    alert(`¡Bienvenido de vuelta, equipo ${partidaExistente.equipo}! Retomando desde la pista ${partidaExistente.pista_actual}...`);
+                    window.location.href = `pista${partidaExistente.pista_actual}.html`;
                 } else {
                     window.location.href = "ranking.html";
                 }
@@ -85,8 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // C. SI LLEGA AQUÍ, LA PARTIDA NO EXISTE EN LA NUBE.
             if (esContinuacion) {
-                // Si tocó "Continuar" pero su partida no existe, le avisamos:
-                alert("No encontramos ninguna partida guardada con este código. Llena el nombre de tu equipo y toca 'INICIAR NUEVA PARTIDA'.");
+                alert("No encontramos ninguna partida guardada con este código y este nombre de equipo. Llena correctamente el nombre de tu equipo y toca 'INICIAR NUEVA PARTIDA'.");
                 avisoCarga.style.display = 'none';
                 return;
             }
@@ -97,16 +121,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Creamos la partida nueva desde cero
-            const userCredential = await signInAnonymously(auth);
-            const user = userCredential.user;
-
+            // D. CREAMOS UNA PARTIDA TOTALMENTE NUEVA
             let idSala = "";
             if (modoStr === 'batalla') {
                 idSala = prompt("Has elegido Modo Batalla ⚔️\nIngresa el código de sala compartido con tus contrincantes (Ej: FLIA-PEREZ):") || "SALA-GENERAL";
             }
 
-            await setDoc(partidaRef, {
+            // Creamos una nueva referencia de documento con ID AUTO-GENERADO
+            const nuevaPartidaRef = doc(collection(db, "partidas"));
+
+            await setDoc(nuevaPartidaRef, {
                 uid_jugador: user.uid,
                 ticket_usado: ticketStr,
                 equipo: equipoStr,
@@ -118,7 +142,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 t_inicio: serverTimestamp() 
             });
 
-            localStorage.setItem('motmot_partida_id', ticketStr);
+            // Guardamos el ID AUTO-GENERADO en la memoria del celular
+            localStorage.setItem('motmot_partida_id', nuevaPartidaRef.id);
             localStorage.setItem('motmot_equipo', equipoStr);
             
             window.location.href = "pista1.html"; 
