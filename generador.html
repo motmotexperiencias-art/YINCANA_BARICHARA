@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | Fábrica de Llaves</title>
+    <link rel="stylesheet" href="./css/global.css">
+    <style>
+        .panel-admin { background: #111; border: 1px solid #ff6600; border-radius: 10px; padding: 20px; text-align: left; }
+        .etiqueta { color: #00cc66; font-size: 14px; font-weight: bold; margin-bottom: 5px; display: block; margin-top: 15px;}
+        .input-admin { width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #444; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 16px; margin-bottom: 10px;}
+        .caja-resultado { display: none; margin-top: 20px; padding: 15px; background: rgba(0, 204, 102, 0.1); border: 1px dashed #00cc66; border-radius: 5px; text-align: center;}
+        .codigo-generado { font-size: 24px; color: #ff6600; font-weight: bold; letter-spacing: 2px; margin: 10px 0;}
+    </style>
+</head>
+<body>
+    <div class="app-juego" style="justify-content: flex-start; padding-top: 40px; overflow-y: auto;">
+        
+        <div style="font-size: 40px; text-align: center;">🗝️</div>
+        <h1 style="color: #ff6600; text-align: center; margin-bottom: 20px;">FÁBRICA DE LLAVES</h1>
+        <p style="text-align: center; color: #888; font-size: 14px; margin-bottom: 30px;">Panel de Administrador (Privado)</p>
+
+        <div class="panel-admin">
+            <label class="etiqueta">1. Selecciona el Modo Vendido</label>
+            <select id="admin-modo" class="input-admin">
+                <option value="solitario">🐺 Solitario (1 Persona)</option>
+                <option value="cooperativo">🤝 Cooperativo (Familia/Amigos)</option>
+                <option value="batalla">⚔️ Batalla (Colegios/Grupos)</option>
+            </select>
+
+            <label class="etiqueta">2. Número de Cupos (Usos Máximos)</label>
+            <input type="number" id="admin-cupos" class="input-admin" value="1" min="1">
+            <p style="font-size: 11px; color: #666; margin-top: -5px;">*Solitario es siempre 1. Para Cooperativo (ej. 5) o Batalla (ej. 30), cámbialo aquí.</p>
+
+            <label class="etiqueta">3. Etiqueta Personalizada (Opcional)</label>
+            <input type="text" id="admin-etiqueta" class="input-admin" placeholder="Ej: SANGIL, PEREZ, etc." maxlength="10" style="text-transform: uppercase;">
+            
+            <button id="btn-crear-llave" class="btn-motmot" style="margin-top: 20px;">⚡ GENERAR LLAVE MAESTRA</button>
+            <div id="admin-spinner" class="spinner" style="display:none; margin: 15px auto;"></div>
+        </div>
+
+        <div id="caja-resultado" class="caja-resultado">
+            <p style="color: #fff; font-size: 14px; margin: 0;">¡Llave activada en la nube!</p>
+            <div id="ticket-final" class="codigo-generado">MOT-XXXX-YYYY</div>
+            <p style="color: #888; font-size: 12px;">Cupos: <span id="res-cupos">--</span> | Modo: <span id="res-modo">--</span></p>
+            
+            <button id="btn-whatsapp" class="btn-motmot" style="background: #25D366; border-color: #25D366; color: #000; margin-top: 15px;">📲 ENVIAR POR WHATSAPP</button>
+            <button onclick="location.reload()" class="btn-motmot" style="background: transparent; border: 1px solid #444; color: #888; margin-top: 10px;">Crear otra llave</button>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // Importamos tus herramientas. Asegúrate de que la ruta sea correcta
+        import { db, doc, setDoc, serverTimestamp } from './js/firebase-config.js';
+
+        const btnCrear = document.getElementById('btn-crear-llave');
+        const selectModo = document.getElementById('admin-modo');
+        const inputCupos = document.getElementById('admin-cupos');
+        const spinner = document.getElementById('admin-spinner');
+        const cajaResultado = document.getElementById('caja-resultado');
+
+        // Automatización: Si elige solitario, bloqueamos los cupos en 1
+        selectModo.addEventListener('change', (e) => {
+            if(e.target.value === 'solitario') {
+                inputCupos.value = 1;
+                inputCupos.disabled = true;
+            } else {
+                inputCupos.disabled = false;
+            }
+        });
+
+        btnCrear.addEventListener('click', async () => {
+            const modo = selectModo.value;
+            const cupos = parseInt(inputCupos.value);
+            let etiqueta = document.getElementById('admin-etiqueta').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+            if (isNaN(cupos) || cupos < 1) {
+                alert("Por favor ingresa un número de cupos válido."); return;
+            }
+
+            // Ocultamos botón, mostramos cargando
+            btnCrear.style.display = 'none';
+            spinner.style.display = 'block';
+
+            // 1. Fabricar el código único (Ej: MOT-BAT-SANGIL-4F8A)
+            const randomCode = Math.floor(1000 + Math.random() * 9000).toString(16).toUpperCase();
+            const prefixModo = modo === 'solitario' ? 'SOL' : (modo === 'cooperativo' ? 'COP' : 'BAT');
+            etiqueta = etiqueta ? `${etiqueta}-` : '';
+            
+            const ticketFinal = `MOT-${prefixModo}-${etiqueta}${randomCode}`;
+
+            try {
+                // 2. Subir la llave a Firebase
+                const ticketRef = doc(db, 'tickets', ticketFinal);
+                await setDoc(ticketRef, {
+                    codigo: ticketFinal,
+                    modo_asignado: modo,
+                    limite_usos: cupos,
+                    usos_actuales: 0, 
+                    estado: 'activo',
+                    fecha_creacion: serverTimestamp()
+                });
+
+                // 3. Mostrar el resultado
+                spinner.style.display = 'none';
+                cajaResultado.style.display = 'block';
+                document.getElementById('ticket-final').innerText = ticketFinal;
+                document.getElementById('res-cupos').innerText = cupos;
+                document.getElementById('res-modo').innerText = modo.toUpperCase();
+
+                // 4. Configurar el botón de WhatsApp
+                // Cambia "tusitio.com" por el dominio real donde vayas a alojar la yincana
+                const urlJuego = "https://tusitio.com/index.html"; 
+                const mensajeWA = `¡Hola! Tu aventura en Barichara te espera. 🧭%0A%0A*Tu Llave Maestra es:* ${ticketFinal}%0A*Modo:* ${modo.toUpperCase()}%0A*Cupos:* ${cupos}%0A%0AIngresa aquí para iniciar la misión: ${urlJuego}`;
+                
+                document.getElementById('btn-whatsapp').onclick = () => {
+                    window.open(`https://wa.me/?text=${mensajeWA}`, '_blank');
+                };
+
+            } catch (error) {
+                console.error("Error fabricando llave:", error);
+                alert("Hubo un error al conectar con Firebase. Revisa la consola.");
+                btnCrear.style.display = 'block';
+                spinner.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
