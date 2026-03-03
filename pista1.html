@@ -6,26 +6,25 @@
     <title>Yincana | Pista 1</title>
     
     <link rel="stylesheet" href="./css/global.css">
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
-        /* El mapa de esta pista */
         #mapa-gps-activo { width: 100%; height: 250px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ff6600; }
         .leaflet-tile { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+        /* Estilo para el recuadro de la cámara */
+        #lector-qr { width: 100%; min-height: 250px; margin-bottom: 15px; display: none; }
     </style>
 </head>
 <body>
 
     <div class="app-juego">
-        
         <div class="progress-container">
             <div class="progress-bar">
-                <div class="dot active"></div>
-                <div class="dot future"></div>
-                <div class="dot future"></div>
-                <div class="dot future"></div>
-                <div class="dot future"></div>
+                <div class="dot active"></div> <div class="dot future"></div> <div class="dot future"></div> <div class="dot future"></div> <div class="dot future"></div>
             </div>
         </div>
 
@@ -42,83 +41,72 @@
             <div style="font-size:12px; color:#888;">DISTANCIA AL OBJETIVO</div>
             <div id="distancia-gps" style="font-size:40px; color:#ff6600; font-weight:bold;">---</div>
             <p style="font-size:10px; color:#ff6600; margin-top:5px;" id="lbl-status">BUSCANDO SEÑAL...</p>
-            
             <p style="margin-top:20px; font-size:10px; text-decoration:underline; cursor:pointer; color:#444;" id="btn-trampa">Omitir GPS (Debug)</p>
         </div>
 
         <div id="step-exito" class="caja-contenedor" style="display:none;">
             <div style="font-size: 50px; margin-bottom:20px;">🎯</div>
             <div class="etiqueta-evidencia" style="background: #00cc66; color: #fff;">¡HAS LLEGADO!</div>
-            <p class="texto-mision">Estás en la ubicación correcta. Ahora busca el código QR oculto en este lugar para escanearlo.</p>
-            <button class="btn-motmot" id="btn-escanear">ABRIR ESCÁNER</button>
+            <p class="texto-mision">Busca el código QR oculto en la fuente y escanéalo.</p>
+            
+            <div id="lector-qr"></div>
+            
+            <button class="btn-motmot" id="btn-escanear">ABRIR CÁMARA</button>
         </div>
-
     </div>
 
     <script type="module">
         import { iniciarMapa, calcularDistanciaMetros } from './js/gps.js';
+        import { iniciarEscaner } from './js/scanner.js';
+        import { avanzarPistaEnFirebase } from './js/motor.js';
 
-        // Coordenadas de prueba (Cámbialas luego por las reales)
         const DESTINO_LAT = 6.633595; 
         const DESTINO_LON = -73.225215;
+        // Este es el texto que DEBE decir el QR pegado en la pared de Barichara
+        const QR_CORRECTO = "BARICHARA_PISTA_01"; 
+        
         let watchID;
 
-        const btnComenzar = document.getElementById('btn-comenzar');
-        const stepIntro = document.getElementById('step-intro');
-        const stepGps = document.getElementById('step-gps');
-        const stepExito = document.getElementById('step-exito');
-        const lblDistancia = document.getElementById('distancia-gps');
-        const lblStatus = document.getElementById('lbl-status');
-
-        btnComenzar.addEventListener('click', () => {
-            // Ocultar intro, mostrar GPS
-            stepIntro.style.display = 'none';
-            stepGps.style.display = 'block';
-            
-            // Dibujar el mapa (función de tu archivo gps.js)
+        // FASE 1 -> FASE 2
+        document.getElementById('btn-comenzar').addEventListener('click', () => {
+            document.getElementById('step-intro').style.display = 'none';
+            document.getElementById('step-gps').style.display = 'block';
             iniciarMapa('mapa-gps-activo', DESTINO_LAT, DESTINO_LON);
 
-            // Encender el sensor GPS del celular
             if (navigator.geolocation) {
-                lblStatus.innerText = "SINTONIZANDO SATÉLITES...";
-                watchID = navigator.geolocation.watchPosition(
-                    (posicion) => {
-                        const latActual = posicion.coords.latitude;
-                        const lonActual = posicion.coords.longitude;
-                        
-                        // Calcular distancia (función de tu archivo gps.js)
-                        const distancia = calcularDistanciaMetros(latActual, lonActual, DESTINO_LAT, DESTINO_LON);
-                        lblDistancia.innerText = Math.round(distancia) + "m";
-                        lblStatus.innerText = "RASTREANDO...";
-
-                        // Si está a menos de 25 metros, ¡llegó!
-                        if (distancia < 25) {
-                            llegamosAlDestino();
-                        }
-                    },
-                    (error) => {
-                        console.error("Error GPS:", error);
-                        lblStatus.innerText = "ERROR DE SEÑAL GPS";
-                    },
-                    { enableHighAccuracy: true, maximumAge: 0 }
-                );
-            } else {
-                alert("Tu dispositivo no soporta GPS.");
+                document.getElementById('lbl-status').innerText = "SINTONIZANDO SATÉLITES...";
+                watchID = navigator.geolocation.watchPosition((pos) => {
+                    const d = calcularDistanciaMetros(pos.coords.latitude, pos.coords.longitude, DESTINO_LAT, DESTINO_LON);
+                    document.getElementById('distancia-gps').innerText = Math.round(d) + "m";
+                    document.getElementById('lbl-status').innerText = "RASTREANDO...";
+                    if (d < 25) llegamosAlDestino();
+                }, (err) => { document.getElementById('lbl-status').innerText = "ERROR DE SEÑAL GPS"; }, { enableHighAccuracy: true });
             }
         });
 
         function llegamosAlDestino() {
             if(watchID) navigator.geolocation.clearWatch(watchID);
-            stepGps.style.display = 'none';
-            stepExito.style.display = 'block';
+            document.getElementById('step-gps').style.display = 'none';
+            document.getElementById('step-exito').style.display = 'block';
         }
 
-        // Botón trampa para que no tengas que salir a la calle a probar hoy
+        // Truco para desarrollador
         document.getElementById('btn-trampa').addEventListener('click', llegamosAlDestino);
         
-        // El botón de escanear (lo conectaremos en la siguiente tarea)
+        // FASE 3 -> Encender cámara
         document.getElementById('btn-escanear').addEventListener('click', () => {
-            alert("Aquí se abrirá la cámara. ¡Lo haremos en el siguiente paso!");
+            document.getElementById('btn-escanear').style.display = 'none'; // Ocultar el botón
+            
+            iniciarEscaner('lector-qr', QR_CORRECTO, async () => {
+                // Esto pasa SI EL QR ES CORRECTO
+                alert("¡CÓDIGO VERIFICADO! Avanzando a la Pista 2...");
+                
+                // Guardamos en la base de datos que ya pasó a la pista 2
+                await avanzarPistaEnFirebase(2);
+                
+                // Lo mandamos a la pista 2 (que crearemos en el siguiente paso)
+                window.location.href = "molde-pista.html"; 
+            });
         });
     </script>
 </body>
