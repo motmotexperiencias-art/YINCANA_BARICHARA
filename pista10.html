@@ -50,7 +50,9 @@
     <script type="module">
         import { iniciarMapa, calcularDistanciaMetros } from './js/gps.js';
         import { iniciarEscaner } from './js/scanner.js';
-        import { db, doc, updateDoc } from './firebase-config.js'; // Importamos la base de datos directo
+        
+        // ¡AQUÍ ESTÁ LA CORRECCIÓN DE LA RUTA!
+        import { db, doc, updateDoc } from './js/firebase-config.js'; 
 
         const DESTINO_LAT = 6.635000; 
         const DESTINO_LON = -73.227000;
