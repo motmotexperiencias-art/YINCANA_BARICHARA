@@ -6,93 +6,176 @@
     <title>Yincana | Salón de la Fama</title>
     <link rel="stylesheet" href="./css/global.css">
     <style>
-        .podio { 
-            background: #111; border: 2px solid #ff6600; border-radius: 15px; 
-            padding: 20px; margin-top: 20px; text-align: left; width: 100%;
-            box-shadow: 0 0 20px rgba(255,102,0,0.1);
-        }
-        .fila-ranking { 
-            display: flex; justify-content: space-between; padding: 12px 0; 
-            border-bottom: 1px solid #333; font-size: 14px; color: #ccc; 
-        }
-        .fila-ranking:last-child { border-bottom: none; }
-        .fila-ranking.yo { color: #00cc66; font-weight: bold; font-size: 16px; background: rgba(0, 204, 102, 0.1); padding: 12px 10px; border-radius: 5px; margin: 5px 0;}
+        .filtros-ranking { display: flex; gap: 10px; margin-top: 20px; width: 100%; max-width: 400px; }
+        .btn-filtro { flex: 1; padding: 10px; background: #222; color: #888; border: 1px solid #444; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.3s; }
+        .btn-filtro.activo { background: #ff6600; color: #000; border-color: #ff6600; }
+        
+        .lista-demas { margin-top: 20px; width: 100%; max-width: 400px; text-align: left; }
+        .fila-resto { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #333; font-size: 14px; background: #111; margin-bottom: 5px; border-radius: 5px;}
+        .fila-resto.yo { border: 1px solid #00cc66; background: rgba(0, 204, 102, 0.1); color: #00cc66; font-weight: bold;}
     </style>
 </head>
 <body>
     <div class="app-juego" style="justify-content: flex-start; padding-top: 40px; overflow-y: auto;">
-        <div class="caja-contenedor" style="border: none; box-shadow: none; padding: 10px; margin-bottom: 0;">
-            <div style="font-size: 70px; margin-bottom: -10px; animation: flotar 3s ease-in-out infinite;">🏆</div>
-            <div class="glitch-text" style="font-size: 26px; color: #00cc66; margin-bottom: 5px;">¡RETO SUPERADO!</div>
-            
-            <p style="color: #bbb; font-size: 14px; margin-bottom: 5px;">El equipo</p>
-            <h1 id="nombre-equipo" style="color: #ff6600; font-size: 28px; margin: 0 0 15px 0; word-wrap: break-word;">---</h1>
-            <p class="texto-mision" style="font-size: 14px;">Ha conquistado los secretos de Barichara. ¡La historia ahora les pertenece!</p>
+        
+        <div style="font-size: 60px; margin-bottom: -10px; animation: flotar 3s ease-in-out infinite;">🏆</div>
+        <div class="glitch-text" style="font-size: 26px; color: #00cc66; margin-bottom: 5px;">¡RETO SUPERADO!</div>
+        <h1 id="nombre-equipo" style="color: #ff6600; font-size: 28px; margin: 0 0 5px 0; word-wrap: break-word;">---</h1>
+        <p style="color: #bbb; font-size: 14px; margin-bottom: 20px;">Tu tiempo final fue: <span id="mi-tiempo" style="color:#fff; font-weight:bold;">Calculando...</span></p>
+
+        <div class="filtros-ranking">
+            <button id="btn-mi-sala" class="btn-filtro activo">MI COMPETENCIA</button>
+            <button id="btn-global" class="btn-filtro">GLOBAL TOP</button>
         </div>
 
-        <div class="podio">
-            <h3 style="color:#ff6600; text-align:center; margin-top:0; letter-spacing: 2px;">📜 SALÓN DE LA FAMA</h3>
-            
-            <div id="lista-ranking">
-                <div class="spinner" style="margin: 20px auto;"></div>
-                <p style="text-align:center; font-size:12px; color:#888;">Consultando pergaminos...</p>
+        <div id="contenedor-podio" class="podio-container" style="display:none;">
             </div>
+
+        <div id="contenedor-lista" class="lista-demas">
+            <div class="spinner" style="margin: 20px auto;"></div>
+            <p style="text-align:center; font-size:12px; color:#888;">Ordenando a los campeones...</p>
         </div>
 
-        <button class="btn-motmot" onclick="limpiarYSalir()" style="margin-top: 30px; background: #333; color: #fff; border: 1px solid #555;">VOLVER AL INICIO</button>
+        <button class="btn-motmot" onclick="limpiarYSalir()" style="margin-top: 30px; background: #333; color: #fff; border: 1px solid #555; width: 100%; max-width: 400px;">CERRAR Y SALIR</button>
     </div>
 
     <script type="module">
-        import { db, collection, getDocs, query, where } from './js/firebase-config.js';
+        import { db, doc, collection, getDocs, getDoc, updateDoc, serverTimestamp } from './js/firebase-config.js';
+
+        // 1. Variables globales
+        const partidaId = localStorage.getItem('motmot_partida_id');
+        let misDatos = null;
+        let todosLosEquipos = [];
 
         document.addEventListener('DOMContentLoaded', async () => {
-            const miEquipo = localStorage.getItem('motmot_equipo') || 'Exploradores Anónimos';
-            document.getElementById('nombre-equipo').innerText = miEquipo;
-            
-            const contenedorRanking = document.getElementById('lista-ranking');
+            if(!partidaId) { window.location.href = 'index.html'; return; }
 
             try {
-                // 1. Buscamos en Firebase TODAS las partidas que digan "terminado"
-                const q = query(collection(db, "partidas"), where("estado", "==", "terminado"));
-                const querySnapshot = await getDocs(q);
-
-                let equipos = [];
-                querySnapshot.forEach((doc) => {
-                    equipos.push(doc.data());
-                });
-
-                // 2. Si nadie ha terminado nunca
-                if (equipos.length === 0) {
-                    contenedorRanking.innerHTML = "<p style='text-align:center; color:#00cc66; font-weight:bold; margin-top:20px;'>¡Eres el primero en la historia en llegar a la meta!</p>";
-                    return;
+                // 2. Primero, leemos NUESTRA partida para calcular nuestro tiempo
+                const miPartidaRef = doc(db, 'partidas', partidaId);
+                const miSnap = await getDoc(miPartidaRef);
+                
+                if(miSnap.exists()) {
+                    misDatos = miSnap.data();
+                    document.getElementById('nombre-equipo').innerText = misDatos.equipo;
+                    
+                    // Si no teníamos tiempo calculado, lo calculamos ahora
+                    if(misDatos.tiempo_total === 0 && misDatos.t_inicio) {
+                        const tInicio = misDatos.t_inicio.toDate();
+                        const tFin = new Date(); // La hora actual
+                        const diferenciaMilisegundos = tFin - tInicio;
+                        
+                        await updateDoc(miPartidaRef, {
+                            tiempo_total: diferenciaMilisegundos,
+                            t_fin: serverTimestamp()
+                        });
+                        misDatos.tiempo_total = diferenciaMilisegundos;
+                    }
+                    
+                    document.getElementById('mi-tiempo').innerText = formatoTiempo(misDatos.tiempo_total);
                 }
 
-                // 3. Imprimimos la lista de ganadores
-                let htmlRanking = "";
-                equipos.forEach((eq, index) => {
-                    // Resaltamos de color verde si el equipo de la lista soy "yo"
-                    let claseYo = (eq.equipo === miEquipo) ? "fila-ranking yo" : "fila-ranking";
-                    
-                    // Asignamos medallas
-                    let medalla = (index === 0) ? "🥇" : (index === 1) ? "🥈" : (index === 2) ? "🥉" : "🏅";
-                    
-                    htmlRanking += `
-                        <div class="${claseYo}">
-                            <span>${medalla} ${eq.equipo} <span style="font-size:10px; color:#888;">(${eq.modo})</span></span>
-                            <span style="color:#ff6600; font-weight:bold;">META</span>
-                        </div>
-                    `;
+                // 3. Traemos a TODOS los que han terminado
+                const querySnapshot = await getDocs(collection(db, "partidas"));
+                
+                querySnapshot.forEach((doc) => {
+                    let datosEquipo = doc.data();
+                    if(datosEquipo.estado === 'terminado' && datosEquipo.tiempo_total > 0) {
+                        todosLosEquipos.push(datosEquipo);
+                    }
                 });
 
-                contenedorRanking.innerHTML = htmlRanking;
+                // 4. Renderizamos por primera vez (Filtro local)
+                renderizarRanking('local');
 
             } catch(error) {
-                console.error("Error cargando ranking:", error);
-                contenedorRanking.innerHTML = "<p style='color:red; text-align:center;'>Error conectando con la base de datos.</p>";
+                console.error(error);
+                document.getElementById('contenedor-lista').innerHTML = "<p style='color:red;'>Error de red. Intenta de nuevo.</p>";
             }
         });
 
-        // Función para limpiar la memoria al salir y permitir que otro equipo juegue
+        // ==========================================
+        // LÓGICA DE FILTRADO Y PINTADO
+        // ==========================================
+        function renderizarRanking(filtro) {
+            let competidores = [];
+
+            if(filtro === 'local' && misDatos) {
+                // Filtramos solo los que jugaron lo mismo que yo
+                competidores = todosLosEquipos.filter(eq => eq.modo === misDatos.modo && eq.id_sala === misDatos.id_sala);
+            } else {
+                // Filtro global (Todos)
+                competidores = [...todosLosEquipos];
+            }
+
+            // Ordenamos matemáticamente de menor a mayor tiempo
+            competidores.sort((a, b) => a.tiempo_total - b.tiempo_total);
+
+            pintarPodio(competidores);
+        }
+
+        function pintarPodio(listaOrdenada) {
+            const contenedorPodio = document.getElementById('contenedor-podio');
+            const contenedorLista = document.getElementById('contenedor-lista');
+
+            if(listaOrdenada.length === 0) {
+                contenedorPodio.style.display = 'none';
+                contenedorLista.innerHTML = "<p style='text-align:center;'>Aún no hay campeones en esta categoría.</p>";
+                return;
+            }
+
+            contenedorPodio.style.display = 'flex';
+            
+            // Creamos los objetos para el podio (Si no existen, los dejamos vacíos)
+            let top1 = listaOrdenada[0] ? `<div class="pilar puesto-1"><div class="pilar-nombre">🥇 ${listaOrdenada[0].equipo}</div><div class="numero-podio">1</div><div class="pilar-tiempo">${formatoTiempo(listaOrdenada[0].tiempo_total)}</div></div>` : '';
+            let top2 = listaOrdenada[1] ? `<div class="pilar puesto-2"><div class="pilar-nombre">🥈 ${listaOrdenada[1].equipo}</div><div class="numero-podio">2</div><div class="pilar-tiempo">${formatoTiempo(listaOrdenada[1].tiempo_total)}</div></div>` : `<div class="pilar puesto-2" style="visibility:hidden;"></div>`;
+            let top3 = listaOrdenada[2] ? `<div class="pilar puesto-3"><div class="pilar-nombre">🥉 ${listaOrdenada[2].equipo}</div><div class="numero-podio">3</div><div class="pilar-tiempo">${formatoTiempo(listaOrdenada[2].tiempo_total)}</div></div>` : `<div class="pilar puesto-3" style="visibility:hidden;"></div>`;
+
+            // El orden visual del CSS Flexbox es 2 - 1 - 3
+            contenedorPodio.innerHTML = top2 + top1 + top3;
+
+            // Pintamos la lista del 4 en adelante, asignando medallas si se requiere o un simple número
+            let htmlLista = "";
+            for (let i = 3; i < listaOrdenada.length; i++) {
+                let eq = listaOrdenada[i];
+                let claseYo = (misDatos && eq.equipo === misDatos.equipo) ? "fila-resto yo" : "fila-resto";
+                let medalla = "🏅"; 
+                
+                htmlLista += `
+                    <div class="${claseYo}">
+                        <span>${medalla} #${i + 1} ${eq.equipo}</span>
+                        <span style="color:#ff6600;">${formatoTiempo(eq.tiempo_total)}</span>
+                    </div>
+                `;
+            }
+
+            contenedorLista.innerHTML = htmlLista;
+        }
+
+        // ==========================================
+        // HERRAMIENTAS
+        // ==========================================
+        function formatoTiempo(milisegundos) {
+            if(!milisegundos) return "--:--";
+            let totalSegundos = Math.floor(milisegundos / 1000);
+            let minutos = Math.floor(totalSegundos / 60);
+            let segundosRestantes = totalSegundos % 60;
+            return `${minutos.toString().padStart(2, '0')}m : ${segundosRestantes.toString().padStart(2, '0')}s`;
+        }
+
+        // Eventos de botones
+        document.getElementById('btn-mi-sala').addEventListener('click', (e) => {
+            e.target.classList.add('activo');
+            document.getElementById('btn-global').classList.remove('activo');
+            renderizarRanking('local');
+        });
+
+        document.getElementById('btn-global').addEventListener('click', (e) => {
+            e.target.classList.add('activo');
+            document.getElementById('btn-mi-sala').classList.remove('activo');
+            renderizarRanking('global');
+        });
+
         window.limpiarYSalir = function() {
             localStorage.removeItem('motmot_partida_id');
             localStorage.removeItem('motmot_equipo');
