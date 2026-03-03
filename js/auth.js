@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("✅ ¡Acceso concedido! Prepárate para iniciar.");
                 
                 // Redirigir a la primera pista (Por ahora lo mandamos al molde)
-                window.location.href = "molde-pista.html"; 
+                window.location.href = "pista1.html"; 
 
             } catch (error) {
                 console.error("Error crítico en el motor:", error);
