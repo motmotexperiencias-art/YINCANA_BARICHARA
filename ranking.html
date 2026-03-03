@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yincana | Salón de la Fama</title>
+    <link rel="stylesheet" href="./css/global.css">
+    <style>
+        .podio { 
+            background: #111; border: 2px solid #ff6600; border-radius: 15px; 
+            padding: 20px; margin-top: 20px; text-align: left; width: 100%;
+            box-shadow: 0 0 20px rgba(255,102,0,0.1);
+        }
+        .fila-ranking { 
+            display: flex; justify-content: space-between; padding: 12px 0; 
+            border-bottom: 1px solid #333; font-size: 14px; color: #ccc; 
+        }
+        .fila-ranking:last-child { border-bottom: none; }
+        .fila-ranking.yo { color: #00cc66; font-weight: bold; font-size: 16px; background: rgba(0, 204, 102, 0.1); padding: 12px 10px; border-radius: 5px; margin: 5px 0;}
+    </style>
+</head>
+<body>
+    <div class="app-juego" style="justify-content: flex-start; padding-top: 40px; overflow-y: auto;">
+        <div class="caja-contenedor" style="border: none; box-shadow: none; padding: 10px; margin-bottom: 0;">
+            <div style="font-size: 70px; margin-bottom: -10px; animation: flotar 3s ease-in-out infinite;">🏆</div>
+            <div class="glitch-text" style="font-size: 26px; color: #00cc66; margin-bottom: 5px;">¡RETO SUPERADO!</div>
+            
+            <p style="color: #bbb; font-size: 14px; margin-bottom: 5px;">El equipo</p>
+            <h1 id="nombre-equipo" style="color: #ff6600; font-size: 28px; margin: 0 0 15px 0; word-wrap: break-word;">---</h1>
+            <p class="texto-mision" style="font-size: 14px;">Ha conquistado los secretos de Barichara. ¡La historia ahora les pertenece!</p>
+        </div>
+
+        <div class="podio">
+            <h3 style="color:#ff6600; text-align:center; margin-top:0; letter-spacing: 2px;">📜 SALÓN DE LA FAMA</h3>
+            
+            <div id="lista-ranking">
+                <div class="spinner" style="margin: 20px auto;"></div>
+                <p style="text-align:center; font-size:12px; color:#888;">Consultando pergaminos...</p>
+            </div>
+        </div>
+
+        <button class="btn-motmot" onclick="limpiarYSalir()" style="margin-top: 30px; background: #333; color: #fff; border: 1px solid #555;">VOLVER AL INICIO</button>
+    </div>
+
+    <script type="module">
+        import { db, collection, getDocs, query, where } from './js/firebase-config.js';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const miEquipo = localStorage.getItem('motmot_equipo') || 'Exploradores Anónimos';
+            document.getElementById('nombre-equipo').innerText = miEquipo;
+            
+            const contenedorRanking = document.getElementById('lista-ranking');
+
+            try {
+                // 1. Buscamos en Firebase TODAS las partidas que digan "terminado"
+                const q = query(collection(db, "partidas"), where("estado", "==", "terminado"));
+                const querySnapshot = await getDocs(q);
+
+                let equipos = [];
+                querySnapshot.forEach((doc) => {
+                    equipos.push(doc.data());
+                });
+
+                // 2. Si nadie ha terminado nunca
+                if (equipos.length === 0) {
+                    contenedorRanking.innerHTML = "<p style='text-align:center; color:#00cc66; font-weight:bold; margin-top:20px;'>¡Eres el primero en la historia en llegar a la meta!</p>";
+                    return;
+                }
+
+                // 3. Imprimimos la lista de ganadores
+                let htmlRanking = "";
+                equipos.forEach((eq, index) => {
+                    // Resaltamos de color verde si el equipo de la lista soy "yo"
+                    let claseYo = (eq.equipo === miEquipo) ? "fila-ranking yo" : "fila-ranking";
+                    
+                    // Asignamos medallas
+                    let medalla = (index === 0) ? "🥇" : (index === 1) ? "🥈" : (index === 2) ? "🥉" : "🏅";
+                    
+                    htmlRanking += `
+                        <div class="${claseYo}">
+                            <span>${medalla} ${eq.equipo} <span style="font-size:10px; color:#888;">(${eq.modo})</span></span>
+                            <span style="color:#ff6600; font-weight:bold;">META</span>
+                        </div>
+                    `;
+                });
+
+                contenedorRanking.innerHTML = htmlRanking;
+
+            } catch(error) {
+                console.error("Error cargando ranking:", error);
+                contenedorRanking.innerHTML = "<p style='color:red; text-align:center;'>Error conectando con la base de datos.</p>";
+            }
+        });
+
+        // Función para limpiar la memoria al salir y permitir que otro equipo juegue
+        window.limpiarYSalir = function() {
+            localStorage.removeItem('motmot_partida_id');
+            localStorage.removeItem('motmot_equipo');
+            window.location.href = 'index.html';
+        };
+    </script>
+</body>
+</html>
